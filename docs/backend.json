@@ -1,0 +1,124 @@
+{
+  "entities": {
+    "Event": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Event",
+      "type": "object",
+      "description": "Represents a calendar event with details such as time, description, and reminders.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the event."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User who created the event. (Relationship: User 1:N Event)"
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the event."
+        },
+        "description": {
+          "type": "string",
+          "description": "A detailed description of the event."
+        },
+        "startTime": {
+          "type": "string",
+          "description": "The start time of the event.",
+          "format": "date-time"
+        },
+        "endTime": {
+          "type": "string",
+          "description": "The end time of the event.",
+          "format": "date-time"
+        },
+        "reminder": {
+          "type": "string",
+          "description": "The time at which a reminder should be sent for the event.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "title",
+        "description",
+        "startTime",
+        "endTime"
+      ]
+    },
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the DayFlow Calendar app.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the user.",
+          "format": "email"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "email"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profiles.  This collection is used for authentication and authorization.  Path-based ownership is enforced through the `userId` parameter.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/events/{eventId}",
+        "definition": {
+          "entityName": "Event",
+          "schema": {
+            "$ref": "#/backend/entities/Event"
+          },
+          "description": "Stores events for a specific user. Path-based ownership is enforced through the `userId` parameter. Includes denormalized `userId` field for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user; establishes path-based ownership."
+            },
+            {
+              "name": "eventId",
+              "description": "The unique identifier for the event."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore data structure is designed to ensure security, scalability, and ease of debugging, adhering to the core design principles of Authorization Independence, Clarity of Intent, DBAC (Database-Based Access Control), and QAPs (Rules are not Filters). It leverages structural segregation and access modeling for enhanced security rule management.\n\n**Authorization Independence:** Achieved primarily through path-based ownership for user-specific data. This approach eliminates the need for complex `get()` calls in security rules, ensuring atomic operations and simplifying debugging.\n\n**Structural Segregation:** User-owned data (events) is stored under `/users/{userId}/events/{eventId}`, providing a clear segregation of access needs based on user ownership.\n\n**Access Modeling:**\n*   **Private Data:** Events are owned by users and stored under their respective user document, thus the data is private.\n\n**QAPs Support:** The structure is designed to support secure `list` operations. Since the data is segregated based on user ID in its own collection, listing events for a specific user is straightforward and secure.\n\nThe design favors path-based ownership for `events`, leading to simple and efficient security rules."
+  }
+}

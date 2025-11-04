@@ -1,0 +1,89 @@
+/**
+ * @file Firestore Security Rules for DayFlow Calendar.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model.  Users can only access their own data.
+ *
+ * Data Structure:
+ * All data is nested under /users/{userId}, with events stored in a subcollection.
+ * /users/{userId} - Stores user profile information.
+ * /users/{userId}/events/{eventId} - Stores events specific to a user.
+ *
+ * Key Security Decisions:
+ * - Users can only create, read, update, and delete their own events.
+ * - Listing all users is not permitted.
+ *
+ * Denormalization for Authorization:
+ * - The events collection at `/users/{userId}/events/{eventId}` contains a denormalized `userId` field to simplify authorization logic and avoid costly `get()` calls.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Secures the user profiles collection, allowing users to create their own profile and manage it.
+     * @path /users/{userId}
+     * @allow (create) - User 'test_user' with ID 'test_user' can create their own profile.
+     *   request.auth.uid == 'test_user'
+     *   request.resource.data.id == 'test_user'
+     * @allow (get, update, delete) - User 'test_user' with ID 'test_user' can get, update, and delete their own profile.
+     *   request.auth.uid == 'test_user'
+     *   resource.data.id == 'test_user'
+     * @deny (create) - User 'other_user' tries to create a profile for 'test_user'.
+     *   request.auth.uid == 'other_user'
+     *   request.resource.data.id == 'test_user'
+     * @deny (get, update, delete) - User 'other_user' tries to access 'test_user' profile.
+     *   request.auth.uid == 'other_user'
+     *   resource.data.id == 'test_user'
+     * @principle Enforces document ownership for profile creation and data access, ensuring only the user can manage their profile.
+     */
+    match /users/{userId} {
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Secures the events subcollection under each user, ensuring only the owner can manage their events.
+     * @path /users/{userId}/events/{eventId}
+     * @allow (create) - User 'test_user' creates an event under their user ID.
+     *   request.auth.uid == 'test_user'
+     *   request.resource.data.userId == 'test_user'
+     * @allow (get, list, update, delete) - User 'test_user' gets, lists, updates, and deletes events under their user ID.
+     *   request.auth.uid == 'test_user'
+     *   resource.data.userId == 'test_user'
+     * @deny (create) - User 'other_user' tries to create an event under 'test_user' user ID.
+     *   request.auth.uid == 'other_user'
+     *   request.resource.data.userId == 'test_user'
+     * @deny (get, list, update, delete) - User 'other_user' tries to access events under 'test_user' user ID.
+     *   request.auth.uid == 'other_user'
+     *   resource.data.userId == 'test_user'
+     * @principle Enforces document ownership for event creation and management, ensuring users can only access their events.
+     */
+    match /users/{userId}/events/{eventId} {
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && resource.data.userId == userId;
+      allow delete: if isExistingOwner(userId);
+    }
+  }
+}
