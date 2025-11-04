@@ -4,4 +4,5 @@ export type CalendarEvent = {
   start: Date;
   end: Date;
   description?: string;
+  userId?: string;
 };

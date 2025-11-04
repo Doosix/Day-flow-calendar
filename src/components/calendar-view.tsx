@@ -12,11 +12,21 @@ import {
   endOfWeek,
   getHours,
   getMinutes,
+  toDate,
 } from 'date-fns';
 import type { CalendarEvent } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// Helper to convert Firestore Timestamp to Date if needed
+const ensureDate = (date: any): Date => {
+  if (date && typeof date.toDate === 'function') {
+    return date.toDate();
+  }
+  return toDate(date);
+};
+
 
 type CalendarViewProps = {
   view: 'month' | 'week' | 'day';
@@ -27,11 +37,19 @@ type CalendarViewProps = {
 };
 
 export default function CalendarView({ view, ...props }: CalendarViewProps) {
+  const safeEvents = props.events.map(event => ({
+    ...event,
+    start: ensureDate(event.start),
+    end: ensureDate(event.end)
+  }));
+  
+  const viewProps = { ...props, events: safeEvents };
+
   return (
     <div key={view} className="animate-in fade-in duration-300">
-      {view === 'month' && <MonthView {...props} />}
-      {view === 'week' && <WeekView {...props} />}
-      {view === 'day' && <DayView {...props} />}
+      {view === 'month' && <MonthView {...viewProps} />}
+      {view === 'week' && <WeekView {...viewProps} />}
+      {view === 'day' && <DayView {...viewProps} />}
     </div>
   );
 }

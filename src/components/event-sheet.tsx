@@ -16,7 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
-import { format } from 'date-fns';
+import { format, toDate } from 'date-fns';
 import { Calendar as CalendarIcon, Trash2 } from 'lucide-react';
 import type { CalendarEvent } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -58,6 +58,13 @@ type EventSheetProps = {
   allEvents: CalendarEvent[];
 };
 
+const ensureDate = (date: any): Date => {
+  if (date && typeof date.toDate === 'function') {
+    return date.toDate();
+  }
+  return toDate(date);
+};
+
 export function EventSheet({
   isOpen,
   onOpenChange,
@@ -74,12 +81,14 @@ export function EventSheet({
   useEffect(() => {
     if (isOpen) {
         if (event) {
+          const startDate = ensureDate(event.start);
+          const endDate = ensureDate(event.end);
           form.reset({
             title: event.title,
-            startDate: event.start,
-            startTime: format(event.start, 'HH:mm'),
-            endDate: event.end,
-            endTime: format(event.end, 'HH:mm'),
+            startDate: startDate,
+            startTime: format(startDate, 'HH:mm'),
+            endDate: endDate,
+            endTime: format(endDate, 'HH:mm'),
             description: event.description || '',
           });
         } else {
@@ -89,7 +98,7 @@ export function EventSheet({
             title: '',
             startDate: initialDate,
             startTime: format(initialDate, 'HH:mm'),
-            endDate: endDate, // 1 hour later
+            endDate: endDate,
             endTime: format(endDate, 'HH:mm'),
             description: '',
           });

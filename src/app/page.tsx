@@ -5,35 +5,23 @@ import type { CalendarEvent } from '@/lib/types';
 import AppHeader from '@/components/app-header';
 import CalendarView from '@/components/calendar-view';
 import { EventSheet } from '@/components/event-sheet';
-import { addDays, set } from 'date-fns';
-
-const today = new Date();
-const initialEvents: CalendarEvent[] = [
-  {
-    id: '1',
-    title: 'Team Meeting',
-    start: set(today, { hours: 10, minutes: 0, seconds: 0, milliseconds: 0 }),
-    end: set(today, { hours: 11, minutes: 0, seconds: 0, milliseconds: 0 }),
-    description: 'Weekly sync-up call to discuss project progress.',
-  },
-  {
-    id: '2',
-    title: 'Dentist Appointment',
-    start: set(addDays(today, 1), { hours: 14, minutes: 0, seconds: 0, milliseconds: 0 }),
-    end: set(addDays(today, 1), { hours: 15, minutes: 0, seconds: 0, milliseconds: 0 }),
-    description: 'Annual check-up.',
-  },
-  {
-    id: '3',
-    title: 'Lunch with Sarah',
-    start: set(addDays(today, -2), { hours: 12, minutes: 30, seconds: 0, milliseconds: 0 }),
-    end: set(addDays(today, -2), { hours: 13, minutes: 30, seconds: 0, milliseconds: 0 }),
-    description: 'Catch up at the new Italian place.',
-  },
-];
+import { useFirebase, useUser } from '@/firebase';
+import { doc, collection } from 'firebase/firestore';
+import { useCollection, useMemoFirebase } from '@/firebase';
+import { addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import AuthStatus from '@/components/auth-status';
 
 export default function Home() {
-  const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
+  const { user, isUserLoading } = useUser();
+  const { firestore } = useFirebase();
+
+  const eventsCollection = useMemoFirebase(() => {
+    if (!user || !firestore) return null;
+    return collection(firestore, 'users', user.uid, 'events');
+  }, [user, firestore]);
+
+  const { data: events, isLoading: areEventsLoading } = useCollection(eventsCollection);
+
   const [view, setView] = useState<'month' | 'week' | 'day'>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isSheetOpen, setSheetOpen] = useState(false);
@@ -41,19 +29,25 @@ export default function Home() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   const handleAddEvent = (event: Omit<CalendarEvent, 'id'>) => {
-    const newEvent = { ...event, id: crypto.randomUUID() };
-    setEvents([...events, newEvent]);
+    if (!eventsCollection) return;
+    const newEvent = { ...event, userId: user!.uid };
+    addDocumentNonBlocking(eventsCollection, newEvent);
     setSheetOpen(false);
   };
 
   const handleUpdateEvent = (updatedEvent: CalendarEvent) => {
-    setEvents(events.map((e) => (e.id === updatedEvent.id ? updatedEvent : e)));
+    if (!eventsCollection) return;
+    const eventRef = doc(eventsCollection, updatedEvent.id);
+    const { id, ...eventData } = updatedEvent;
+    setDocumentNonBlocking(eventRef, eventData, { merge: true });
     setSheetOpen(false);
     setSelectedEvent(null);
   };
   
   const handleDeleteEvent = (eventId: string) => {
-    setEvents(events.filter((e) => e.id !== eventId));
+    if (!eventsCollection) return;
+    const eventRef = doc(eventsCollection, eventId);
+    deleteDocumentNonBlocking(eventRef);
     setSheetOpen(false);
     setSelectedEvent(null);
   };
@@ -70,6 +64,28 @@ export default function Home() {
     setSheetOpen(true);
   };
 
+  if (isUserLoading) {
+    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  }
+  
+  if (!user) {
+    return (
+       <div className="flex h-screen items-center justify-center bg-background">
+        <div className="w-full max-w-md p-8 space-y-8">
+          <div className="text-center">
+             <h1 className="text-3xl font-bold text-foreground">
+               Welcome to DayFlow Calendar
+             </h1>
+             <p className="mt-2 text-muted-foreground">
+               Please sign in to manage your schedule.
+             </p>
+          </div>
+          <AuthStatus />
+        </div>
+       </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen bg-background">
       <AppHeader
@@ -82,7 +98,7 @@ export default function Home() {
       <main className="flex-1 overflow-auto p-4 md:p-6">
         <CalendarView
           view={view}
-          events={events}
+          events={events || []}
           currentDate={currentDate}
           onDateClick={openNewEventSheet}
           onEventClick={openEditEventSheet}
@@ -95,7 +111,7 @@ export default function Home() {
         selectedDate={selectedDate}
         onSave={selectedEvent ? handleUpdateEvent : handleAddEvent}
         onDelete={handleDeleteEvent}
-        allEvents={events}
+        allEvents={events || []}
       />
     </div>
   );
